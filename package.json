@@ -1,6 +1,6 @@
 {
   "name": "@islom929/react-eimzo",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "React hook for E-IMZO digital signatures. Simple API, zero UI dependencies.",
   "type": "module",
   "main": "dist/index.cjs",
@@ -14,7 +14,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "scripts": {
     "build": "node scripts/embed-sdk.js && tsup",
