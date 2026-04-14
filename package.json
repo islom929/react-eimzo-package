@@ -1,6 +1,6 @@
 {
   "name": "@islom929/react-eimzo",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "React hook for E-IMZO digital signatures. Simple API, zero UI dependencies.",
   "type": "module",
   "main": "dist/index.cjs",
@@ -48,13 +48,13 @@
     "imzo"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/islom929/react-eimzo#readme",
+  "homepage": "https://github.com/islom929/react-eimzo-package#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/islom929/react-eimzo.git"
+    "url": "git+https://github.com/islom929/react-eimzo-package.git"
   },
   "bugs": {
-    "url": "https://github.com/islom929/react-eimzo/issues"
+    "url": "https://github.com/islom929/react-eimzo-package/issues"
   },
   "author": "islom929"
 }
