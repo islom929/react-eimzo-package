@@ -169,24 +169,89 @@ function TokenSign() {
 }
 ```
 
-### Check E-IMZO installation
+### Error handling
 
 ```tsx
 function EimzoStatus() {
-  const { isInstalled } = useEimzo()
+  const { isInstalled, error, version } = useEimzo()
 
-  if (!isInstalled) {
+  if (error) {
     return (
       <div>
-        <p>E-IMZO is not installed.</p>
+        <p style={{ color: 'red' }}>{error}</p>
         <a href="https://e-imzo.uz/main/downloads/">Download E-IMZO</a>
       </div>
     )
   }
 
-  return <p>E-IMZO is ready</p>
+  if (!isInstalled) {
+    return <p>Loading...</p>
+  }
+
+  return <p>E-IMZO v{version?.major}.{version?.minor} ready</p>
 }
 ```
+
+### Error handling in sign
+
+Errors from E-IMZO SDK are passed directly to `onError`. Common errors:
+
+```tsx
+sign({
+  keyId: cert,
+  data: '...',
+  onSuccess: (pkcs7) => { /* success */ },
+  onError: (err) => {
+    // err contains the SDK error message:
+    // "Ввод пароля отменен" — user cancelled password dialog
+    // "BadPaddingException" — wrong password
+    // Other SDK-native errors
+    console.error(err)
+  },
+})
+```
+
+### Possible errors
+
+| When | Error | Description |
+|------|-------|-------------|
+| Install | `"E-IMZO не запущен. Убедитесь, что приложение E-IMZO установлено и запущено."` | E-IMZO app is not running or not installed |
+| Install | `"Версия E-IMZO устарела (X.XX). Минимальная версия: 3.36"` | E-IMZO version is too old |
+| loadKeys | `"Please install new version of E-IMZO"` | SDK version check failed |
+| sign | `"Ввод пароля отменен"` | User cancelled password dialog |
+| sign | `"BadPaddingException"` | Wrong password entered |
+| sign | WebSocket error code (number) | Connection to E-IMZO lost |
+
+### Version check
+
+The package automatically checks E-IMZO version on mount. Minimum required version is **3.36**.
+
+```tsx
+function VersionInfo() {
+  const { version, isInstalled } = useEimzo()
+
+  if (!isInstalled || !version) return null
+
+  const v = parseInt(version.major) * 100 + parseInt(version.minor)
+
+  return (
+    <div>
+      <p>E-IMZO v{version.major}.{version.minor}</p>
+      <p>PFX: supported</p>
+      <p>ID-card: {v >= 412 ? 'supported' : 'not supported (need v4.12+)'}</p>
+      <p>BAIK/CKC: {v >= 486 ? 'supported' : 'not supported (need v4.86+)'}</p>
+    </div>
+  )
+}
+```
+
+E-IMZO version determines which key types are available:
+
+| Version | PFX | ID-card | BAIK | CKC |
+|---------|-----|---------|------|-----|
+| v3.36+ | yes | no | no | no |
+| v4.12+ | yes | yes | no | no |
+| v4.86+ | yes | yes | yes | yes |
 
 ## API
 
@@ -205,6 +270,8 @@ Wraps your app. Initializes E-IMZO SDK automatically.
 |----------|------|-------------|
 | `isInstalled` | `boolean` | E-IMZO app detected and running |
 | `isLoading` | `boolean` | Operation in progress (loadKeys or sign) |
+| `error` | `string \| null` | Install error message, null if OK |
+| `version` | `IEimzoVersion \| null` | E-IMZO version `{ major, minor }` |
 | `keyList` | `ICertificate[]` | Available certificates |
 | `deviceStatus` | `IDeviceStatus` | Connected hardware devices |
 | `loadKeys` | `() => Promise<void>` | Load certificates and check devices |
@@ -228,9 +295,17 @@ import type {
   IDeviceStatus,
   IEimzoContext,
   IEimzoProviderProps,
+  IEimzoVersion,
   TKeyType,
 } from '@islom929/react-eimzo'
 ```
+
+### IEimzoVersion
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `major` | `string` | Major version (e.g. `"4"`) |
+| `minor` | `string` | Minor version (e.g. `"86"`) |
 
 ### ICertificate
 
