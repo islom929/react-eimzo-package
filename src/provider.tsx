@@ -58,7 +58,7 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
       })
       .catch((err) => {
         setIsInstalled(false)
-        setError(typeof err === 'string' ? err : 'E-IMZO not found')
+        setError(typeof err === 'string' ? err : String(err))
       })
   }, [])
 
@@ -89,7 +89,7 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
         const pkcs7 = await eimzo.createPkcs7(id, data)
         onSuccess(pkcs7)
       } catch (err) {
-        const message = typeof err === 'string' ? err : 'E-IMZO signing failed'
+        const message = typeof err === 'string' ? err : String(err)
         onError?.(message)
       } finally {
         setIsLoading(false)

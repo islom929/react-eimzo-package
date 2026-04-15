@@ -23,7 +23,15 @@ export function checkVersion(): Promise<{ major: string; minor: string }> {
   return new Promise((resolve, reject) => {
     EIMZOClient.checkVersion(
       (major, minor) => resolve({ major, minor }),
-      (e, r) => reject(r || e),
+      (e, r) => {
+        if (!r && typeof e === 'number') {
+          reject(
+            'E-IMZO не запущен. Убедитесь, что приложение E-IMZO установлено и запущено.',
+          )
+        } else {
+          reject(r || e)
+        }
+      },
     )
   })
 }
@@ -123,7 +131,7 @@ export async function install(
 
   const installed = parseInt(version.major) * 100 + parseInt(version.minor)
   if (installed < MIN_VERSION) {
-    throw `E-IMZO version too old (${version.major}.${version.minor}). Minimum: 3.36`
+    throw `Версия E-IMZO устарела (${version.major}.${version.minor}). Минимальная версия: 3.36`
   }
 
   await installApiKeys(apiKeys)
