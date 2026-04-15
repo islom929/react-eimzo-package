@@ -40,9 +40,16 @@ export interface IEimzoProviderProps {
   children: React.ReactNode
 }
 
+export interface IEimzoVersion {
+  major: string
+  minor: string
+}
+
 export interface IEimzoContext {
   isInstalled: boolean
   isLoading: boolean
+  error: string | null
+  version: IEimzoVersion | null
   keyList: ICertificate[]
   deviceStatus: IDeviceStatus
   loadKeys: () => Promise<void>

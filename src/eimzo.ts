@@ -113,8 +113,19 @@ export function checkCkc(): Promise<boolean> {
   })
 }
 
-export async function install(apiKeys?: string[]): Promise<void> {
+const MIN_VERSION = 336
+
+export async function install(
+  apiKeys?: string[],
+): Promise<{ major: string; minor: string }> {
   await loadSDK()
-  await checkVersion()
+  const version = await checkVersion()
+
+  const installed = parseInt(version.major) * 100 + parseInt(version.minor)
+  if (installed < MIN_VERSION) {
+    throw `E-IMZO version too old (${version.major}.${version.minor}). Minimum: 3.36`
+  }
+
   await installApiKeys(apiKeys)
+  return version
 }

@@ -11,6 +11,7 @@ import type {
   ISignParams,
   IEimzoContext,
   IDeviceStatus,
+  IEimzoVersion,
 } from './types'
 import * as eimzo from './eimzo'
 
@@ -24,6 +25,8 @@ interface IEimzoProviderProps {
 export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
   const [isInstalled, setIsInstalled] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [version, setVersion] = useState<IEimzoVersion | null>(null)
   const [keyList, setKeyList] = useState<ICertificate[]>([])
   const [deviceStatus, setDeviceStatus] = useState<IDeviceStatus>({
     idcard: false,
@@ -47,11 +50,16 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
   useEffect(() => {
     eimzo
       .install(apiKeys)
-      .then(async () => {
+      .then(async (v) => {
         setIsInstalled(true)
+        setVersion(v)
+        setError(null)
         await checkDevices()
       })
-      .catch(() => setIsInstalled(false))
+      .catch((err) => {
+        setIsInstalled(false)
+        setError(typeof err === 'string' ? err : 'E-IMZO not found')
+      })
   }, [])
 
   const loadKeys = useCallback(async () => {
@@ -95,6 +103,8 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
       value={{
         isInstalled,
         isLoading,
+        error,
+        version,
         keyList,
         deviceStatus,
         loadKeys,

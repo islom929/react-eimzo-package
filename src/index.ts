@@ -5,5 +5,6 @@ export type {
   IDeviceStatus,
   IEimzoContext,
   IEimzoProviderProps,
+  IEimzoVersion,
   TKeyType,
 } from './types'
