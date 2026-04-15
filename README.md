@@ -1,5 +1,9 @@
 # @islom929/react-eimzo
 
+[![npm version](https://img.shields.io/npm/v/@islom929/react-eimzo.svg)](https://www.npmjs.com/package/@islom929/react-eimzo)
+[![npm downloads](https://img.shields.io/npm/dm/@islom929/react-eimzo.svg)](https://www.npmjs.com/package/@islom929/react-eimzo)
+[![license](https://img.shields.io/npm/l/@islom929/react-eimzo.svg)](https://github.com/islom929/react-eimzo-package/blob/main/LICENSE)
+
 React hook for E-IMZO digital signatures. Simple API, zero UI dependencies — works with any component library.
 
 ## Install

@@ -1,6 +1,6 @@
 {
   "name": "@islom929/react-eimzo",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "React hook for E-IMZO digital signatures. Simple API, zero UI dependencies.",
   "type": "module",
   "main": "dist/index.cjs",
