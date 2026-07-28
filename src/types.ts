@@ -22,9 +22,18 @@ export interface ICertificate {
   expired?: boolean
 }
 
-export interface ISignParams {
+export interface ILoadKeysOptions {
+  force?: boolean
+  includeLegacyTokens?: boolean
+}
+
+export interface ISignAsyncParams {
   keyId: ICertificate | string
   data: string
+  verifyPassword?: boolean
+}
+
+export interface ISignParams extends ISignAsyncParams {
   onSuccess: (pkcs7: string) => void
   onError?: (error: string) => void
 }
@@ -52,6 +61,15 @@ export interface IEimzoContext {
   version: IEimzoVersion | null
   keyList: ICertificate[]
   deviceStatus: IDeviceStatus
-  loadKeys: () => Promise<void>
+  loadKeys: {
+    (): Promise<void>
+    (options: ILoadKeysOptions): Promise<void>
+  }
+  reloadKeys: (options?: ILoadKeysOptions) => Promise<void>
+  prepareKey: (
+    certificate: ICertificate,
+    verifyPassword?: boolean,
+  ) => Promise<string>
+  signAsync: (params: ISignAsyncParams) => Promise<string>
   sign: (params: ISignParams) => void
 }

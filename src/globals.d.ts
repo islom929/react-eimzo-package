@@ -35,6 +35,7 @@ declare var EIMZOClient: {
     itemUiGen: (itemId: string, v: any) => any,
     success: (items: any[], firstId: string | null) => void,
     fail: (e: any, r: string | null) => void,
+    includeLegacyTokens?: boolean,
   ) => void
   idCardIsPLuggedIn: (
     success: (plugged: boolean) => void,

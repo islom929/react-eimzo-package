@@ -58,7 +58,10 @@ function SignDocument() {
 
   return (
     <div>
-      <button onClick={loadKeys} disabled={!isInstalled || isLoading}>
+      <button
+        onClick={() => void loadKeys()}
+        disabled={!isInstalled || isLoading}
+      >
         Load keys
       </button>
 
@@ -94,6 +97,7 @@ function PfxSign() {
     sign({
       keyId: cert,
       data: JSON.stringify({ orderId: 123, amount: 50000 }),
+      verifyPassword: true,
       onSuccess: (pkcs7) => {
         setResult(pkcs7)
         // Send to backend
@@ -273,13 +277,20 @@ Wraps your app. Initializes E-IMZO SDK automatically.
 | Property | Type | Description |
 |----------|------|-------------|
 | `isInstalled` | `boolean` | E-IMZO app detected and running |
-| `isLoading` | `boolean` | Operation in progress (loadKeys or sign) |
-| `error` | `string \| null` | Install error message, null if OK |
+| `isLoading` | `boolean` | Key loading, preparation, or signing is in progress |
+| `error` | `string \| null` | Latest E-IMZO operation error, null if OK |
 | `version` | `IEimzoVersion \| null` | E-IMZO version `{ major, minor }` |
 | `keyList` | `ICertificate[]` | Available certificates |
 | `deviceStatus` | `IDeviceStatus` | Connected hardware devices |
-| `loadKeys` | `() => Promise<void>` | Load certificates and check devices |
+| `loadKeys` | `(options?) => Promise<void>` | Load certificates into `keyList`; cached unless `force` is true |
+| `reloadKeys` | `(options?) => Promise<void>` | Force-refresh certificates; rejects if the refresh fails |
+| `prepareKey` | `(certificate, verifyPassword?) => Promise<string>` | Load a certificate and optionally verify its password/PIN |
+| `signAsync` | `(params) => Promise<string>` | Promise-first signing API; resolves with PKCS#7 |
 | `sign` | `(params: ISignParams) => void` | Sign data |
+
+Device status (`idcard`, `baikey`, `ckc`) is probed in the background once
+installation succeeds. A slow or unavailable hardware probe does not block
+PFX key loading or signing.
 
 ### sign(params)
 
@@ -287,14 +298,72 @@ Wraps your app. Initializes E-IMZO SDK automatically.
 |-------|------|-------------|
 | `keyId` | `ICertificate \| string` | Certificate object or `'idcard'` / `'baikey'` / `'ckc'` |
 | `data` | `string` | Data to sign (usually JSON.stringify) |
+| `verifyPassword` | `boolean` | Optional. Verify PFX password or FTJC PIN before signing |
 | `onSuccess` | `(pkcs7: string) => void` | Called with base64 PKCS#7 signature |
 | `onError` | `(error: string) => void` | Optional. Called on failure |
+
+### signAsync(params)
+
+Use `signAsync` when the surrounding code already uses `async`/`await`:
+
+```tsx
+const { signAsync } = useEimzo()
+
+const pkcs7 = await signAsync({
+  keyId: certificate,
+  data: JSON.stringify(payload),
+  verifyPassword: true,
+})
+```
+
+Use `prepareKey(certificate, true)` when password/PIN verification must happen
+before another operation, such as requesting a short-lived server challenge.
+Pass the returned key ID string to `signAsync`.
+
+`loadKeys({ includeLegacyTokens: true })` includes legacy FTJC certificates.
+Use `reloadKeys(...)` when a certificate or token may have been attached after
+the first list operation.
+
+## v0.6 security compatibility
+
+Starting with v0.6, the bundled SDK no longer modifies native `Date.prototype`
+or `String.prototype` objects. The documented React API (`EimzoProvider`,
+`useEimzo`, `loadKeys`, and `sign`) is unchanged.
+
+Applications that used undocumented SDK globals directly must migrate:
+
+- Use an application-local date formatter instead of legacy date extensions.
+- Use `Base64.encode(value)` / `Base64.decode(value)` instead of legacy string
+  extensions.
+- The legacy certificate-field splitting extension was internal and has no
+  public replacement.
+
+## Behavior
+
+**Install is deduplicated per page load.** Parallel mounts (including React
+`StrictMode` double-invocation) share one installation promise. A failed
+attempt is cleared, so a later key load can retry after the user starts E-IMZO.
+
+**`loadKeys()` is cached.** Once the first successful call populates `keyList`,
+later calls resolve immediately. Use `reloadKeys()` or
+`loadKeys({ force: true })` for a fresh device/certificate list. Requesting
+`includeLegacyTokens: true` also refreshes a cache that only contains PFX
+certificates. For compatibility with v0.5, `loadKeys()` records an error but
+resolves after a failed load; the new `reloadKeys()` API rejects so callers can
+handle refresh failures explicitly.
+
+**`apiKeys` are managed as domain/key pairs.** Reusing a domain during a later
+provider initialization updates its key instead of corrupting the flat SDK key
+list. Treat `apiKeys` as initialization configuration rather than a frequently
+changing prop.
 
 ## Types
 
 ```tsx
 import type {
   ICertificate,
+  ILoadKeysOptions,
+  ISignAsyncParams,
   ISignParams,
   IDeviceStatus,
   IEimzoContext,

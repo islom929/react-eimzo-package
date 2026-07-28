@@ -4,23 +4,28 @@ import {
   useState,
   useCallback,
   useEffect,
-  type ReactNode,
+  useRef,
 } from 'react'
 import type {
   ICertificate,
-  ISignParams,
-  IEimzoContext,
   IDeviceStatus,
+  IEimzoContext,
+  IEimzoProviderProps,
   IEimzoVersion,
+  ILoadKeysOptions,
+  ISignAsyncParams,
+  ISignParams,
 } from './types'
 import * as eimzo from './eimzo'
 
 const EimzoContext = createContext<IEimzoContext | null>(null)
 
-interface IEimzoProviderProps {
-  apiKeys?: string[]
-  children: ReactNode
-}
+const toErrorMessage = (error: unknown) =>
+  error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : String(error)
 
 export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
   const [isInstalled, setIsInstalled] = useState(false)
@@ -33,6 +38,25 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
     baikey: false,
     ckc: false,
   })
+  const apiKeysRef = useRef(apiKeys)
+  const activeOperationsRef = useRef(0)
+  const installPromiseRef = useRef<Promise<IEimzoVersion> | null>(null)
+  const keysLoadedRef = useRef(false)
+  const keysIncludeLegacyTokensRef = useRef(false)
+  const loadKeysPromiseRef = useRef<Promise<void> | null>(null)
+  const loadKeysPromiseIncludesLegacyTokensRef = useRef(false)
+
+  const startOperation = useCallback(() => {
+    activeOperationsRef.current += 1
+    setIsLoading(true)
+  }, [])
+
+  const finishOperation = useCallback(() => {
+    activeOperationsRef.current = Math.max(0, activeOperationsRef.current - 1)
+    if (activeOperationsRef.current === 0) {
+      setIsLoading(false)
+    }
+  }, [])
 
   const checkDevices = useCallback(async () => {
     const [idcard, baikey, ckc] = await Promise.allSettled([
@@ -47,55 +71,153 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
     })
   }, [])
 
-  useEffect(() => {
-    eimzo
-      .install(apiKeys)
+  const ensureInstalled = useCallback((): Promise<IEimzoVersion> => {
+    if (installPromiseRef.current) return installPromiseRef.current
+
+    const promise = eimzo
+      .install(apiKeysRef.current)
       .then(async (v) => {
         setIsInstalled(true)
         setVersion(v)
         setError(null)
-        await checkDevices()
+        void checkDevices()
+        return v
       })
       .catch((err) => {
+        installPromiseRef.current = null
         setIsInstalled(false)
-        setError(typeof err === 'string' ? err : String(err))
+        setError(toErrorMessage(err))
+        throw err
       })
-  }, [])
 
-  const loadKeys = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const certs = await eimzo.listAllUserKeys()
-      setKeyList(certs)
-    } catch (err) {
-      console.error('E-IMZO: Failed to load keys', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+    installPromiseRef.current = promise
+    return promise
+  }, [checkDevices])
 
-  const sign = useCallback(
-    async ({ keyId, data, onSuccess, onError }: ISignParams) => {
-      setIsLoading(true)
-      try {
-        let id: string
+  useEffect(() => {
+    void ensureInstalled().catch(() => undefined)
+  }, [ensureInstalled])
 
-        if (typeof keyId === 'object') {
-          id = await eimzo.loadKey(keyId)
-        } else {
-          id = keyId
+  const runLoadKeys: (
+    options?: ILoadKeysOptions,
+  ) => Promise<void> = useCallback(
+    (options: ILoadKeysOptions = {}): Promise<void> => {
+      if (loadKeysPromiseRef.current) {
+        const inFlight = loadKeysPromiseRef.current
+        const needsLegacyTokenRefresh =
+          options.includeLegacyTokens === true &&
+          !loadKeysPromiseIncludesLegacyTokensRef.current
+
+        return options.force || needsLegacyTokenRefresh
+          ? inFlight.then(() => runLoadKeys(options))
+          : inFlight
+      }
+
+      const hasRequestedKeys =
+        keysLoadedRef.current &&
+        (options.includeLegacyTokens !== true ||
+          keysIncludeLegacyTokensRef.current)
+      if (!options.force && hasRequestedKeys) return Promise.resolve()
+
+      const promise = (async () => {
+        startOperation()
+        try {
+          await ensureInstalled()
+          const certs = await eimzo.listAllUserKeys({
+            includeLegacyTokens: options.includeLegacyTokens,
+          })
+          setKeyList(certs)
+          setError(null)
+          keysLoadedRef.current = true
+          keysIncludeLegacyTokensRef.current =
+            options.includeLegacyTokens === true
+        } catch (err) {
+          setError(toErrorMessage(err))
+          throw err
+        } finally {
+          finishOperation()
+          loadKeysPromiseRef.current = null
+          loadKeysPromiseIncludesLegacyTokensRef.current = false
         }
+      })()
 
-        const pkcs7 = await eimzo.createPkcs7(id, data)
-        onSuccess(pkcs7)
+      loadKeysPromiseRef.current = promise
+      loadKeysPromiseIncludesLegacyTokensRef.current =
+        options.includeLegacyTokens === true
+      return promise
+    },
+    [ensureInstalled, finishOperation, startOperation],
+  )
+
+  const loadKeys = useCallback(
+    (options: ILoadKeysOptions = {}): Promise<void> =>
+      runLoadKeys(options).catch(() => undefined),
+    [runLoadKeys],
+  )
+
+  const reloadKeys = useCallback(
+    (options: ILoadKeysOptions = {}) =>
+      runLoadKeys({ ...options, force: true }),
+    [runLoadKeys],
+  )
+
+  const prepareKey = useCallback(
+    async (
+      certificate: ICertificate,
+      verifyPassword = false,
+    ): Promise<string> => {
+      startOperation()
+      try {
+        await ensureInstalled()
+        const keyId = await eimzo.loadKey(certificate, verifyPassword)
+        setError(null)
+        return keyId
       } catch (err) {
-        const message = typeof err === 'string' ? err : String(err)
-        onError?.(message)
+        const message = toErrorMessage(err)
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
       } finally {
-        setIsLoading(false)
+        finishOperation()
       }
     },
-    [],
+    [ensureInstalled, finishOperation, startOperation],
+  )
+
+  const signAsync = useCallback(
+    async ({
+      keyId,
+      data,
+      verifyPassword = false,
+    }: ISignAsyncParams): Promise<string> => {
+      startOperation()
+      try {
+        await ensureInstalled()
+
+        const id =
+          typeof keyId === 'object'
+            ? await eimzo.loadKey(keyId, verifyPassword)
+            : keyId
+
+        const signature = await eimzo.createPkcs7(id, data)
+        setError(null)
+        return signature
+      } catch (err) {
+        const message = toErrorMessage(err)
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
+      } finally {
+        finishOperation()
+      }
+    },
+    [ensureInstalled, finishOperation, startOperation],
+  )
+
+  const sign = useCallback(
+    ({ onSuccess, onError, ...params }: ISignParams) =>
+      signAsync(params)
+        .then(onSuccess)
+        .catch((err) => onError?.(toErrorMessage(err))),
+    [signAsync],
   )
 
   return (
@@ -108,6 +230,9 @@ export function EimzoProvider({ apiKeys, children }: IEimzoProviderProps) {
         keyList,
         deviceStatus,
         loadKeys,
+        reloadKeys,
+        prepareKey,
+        signAsync,
         sign,
       }}
     >

@@ -145,25 +145,6 @@
         decode: decode,
         noConflict: noConflict
     };
-    if (typeof Object.defineProperty === 'function') {
-        var noEnum = function(v){
-            return {value:v,enumerable:false,writable:true,configurable:true};
-        };
-        global.Base64.extendString = function () {
-            Object.defineProperty(
-                String.prototype, 'fromBase64', noEnum(function () {
-                    return decode(this)
-                }));
-            Object.defineProperty(
-                String.prototype, 'toBase64', noEnum(function (urisafe) {
-                    return encode(this, urisafe)
-                }));
-            Object.defineProperty(
-                String.prototype, 'toBase64URI', noEnum(function () {
-                    return encode(this, true)
-                }));
-        };
-    }
 })(this);
 
 CAPIWS = (typeof EIMZOEXT !== 'undefined') ? EIMZOEXT : {
@@ -285,18 +266,6 @@ CAPIWS = (typeof EIMZOEXT !== 'undefined') ? EIMZOEXT : {
     }
 };
 
-Date.prototype.yyyymmdd = function () {
-    var yyyy = this.getFullYear().toString();
-    var mm = (this.getMonth() + 1).toString();
-    var dd = this.getDate().toString();
-    return yyyy + (mm[1] ? mm : "0" + mm[0]) + (dd[1] ? dd : "0" + dd[0]);
-};
-Date.prototype.ddmmyyyy = function () {
-    var yyyy = this.getFullYear().toString();
-    var mm = (this.getMonth() + 1).toString();
-    var dd = this.getDate().toString();
-    return (dd[1] ? dd : "0" + dd[0]) + "." + (mm[1] ? mm : "0" + mm[0]) + "." + yyyy;
-};
 var dates = {
     convert: function (d) {
         return (
@@ -325,43 +294,6 @@ var dates = {
                 NaN
                 );
     }
-};
-String.prototype.splitKeep = function (splitter, ahead) {
-    var self = this;
-    var result = [];
-    if (splitter != '') {
-        function getSubst(value) {
-            var substChar = value[0] == '0' ? '1' : '0';
-            var subst = '';
-            for (var i = 0; i < value.length; i++) {
-                subst += substChar;
-            }
-            return subst;
-        };
-        var matches = [];
-        var replaceName = splitter instanceof RegExp ? "replace" : "replaceAll";
-        var r = self[replaceName](splitter, function (m, i, e) {
-            matches.push({value: m, index: i});
-            return getSubst(m);
-        });
-        var lastIndex = 0;
-        for (var i = 0; i < matches.length; i++) {
-            var m = matches[i];
-            var nextIndex = ahead == true ? m.index : m.index + m.value.length;
-            if (nextIndex != lastIndex) {
-                var part = self.substring(lastIndex, nextIndex);
-                result.push(part);
-                lastIndex = nextIndex;
-            }
-        };
-        if (lastIndex < self.length) {
-            var part = self.substring(lastIndex, self.length);
-            result.push(part);
-        };
-    } else {
-        result.add(self);
-    };
-    return result;
 };
 
 var EIMZOClient = {
@@ -404,13 +336,13 @@ var EIMZOClient = {
             fail(e, null);
         });
     },
-    listAllUserKeys: function(itemIdGen, itemUiGen, success, fail){
+    listAllUserKeys: function(itemIdGen, itemUiGen, success, fail, includeLegacyTokens){
         var items = [];
         var errors = [];
         if(!EIMZOClient.NEW_API){
             fail(null, 'Please install new version of E-IMZO');
         } else {
-            if(EIMZOClient.NEW_API2){
+            if(EIMZOClient.NEW_API2 && includeLegacyTokens !== true){
                 EIMZOClient._findPfxs2(itemIdGen, itemUiGen, items, errors, function (firstItmId2) {
                     if(items.length === 0 && errors.length > 0){
                         fail(errors[0].e, errors[0].r);
@@ -566,8 +498,43 @@ var EIMZOClient = {
         });
     },
     _getX500Val: function (s, f) {
-        var res = s.splitKeep(/,[A-Z]+=/g, true);
-        for (var i in res) {
+        function splitFields(self, splitter, ahead) {
+            var result = [];
+            if (splitter != '') {
+                function getSubst(value) {
+                    var substChar = value[0] == '0' ? '1' : '0';
+                    var subst = '';
+                    for (var index = 0; index < value.length; index++) {
+                        subst += substChar;
+                    }
+                    return subst;
+                };
+                var matches = [];
+                var replaceName = splitter instanceof RegExp ? "replace" : "replaceAll";
+                self[replaceName](splitter, function (match, index) {
+                    matches.push({value: match, index: index});
+                    return getSubst(match);
+                });
+                var lastIndex = 0;
+                for (var index = 0; index < matches.length; index++) {
+                    var match = matches[index];
+                    var nextIndex = ahead == true ? match.index : match.index + match.value.length;
+                    if (nextIndex != lastIndex) {
+                        result.push(self.substring(lastIndex, nextIndex));
+                        lastIndex = nextIndex;
+                    }
+                };
+                if (lastIndex < self.length) {
+                    result.push(self.substring(lastIndex, self.length));
+                };
+            } else {
+                result.push(self);
+            };
+            return result;
+        }
+
+        var res = splitFields(s, /,[A-Z]+=/g, true);
+        for (var i = 0; i < res.length; i++) {
             var n = res[i].search((i > 0 ? "," : "") + f + "=");
             if (n !== -1) {
                 return res[i].slice(n + f.length + 1 + (i > 0 ? 1 : 0));
